@@ -4,6 +4,7 @@ import re
 import os
 import yaml
 from dotenv import load_dotenv
+import subprocess
 
 load_dotenv()
 
