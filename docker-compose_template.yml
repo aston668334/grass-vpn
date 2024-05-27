@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  vpnclient1:
+    image: aron666/softether-vpnclient
+    container_name: vpnclient1
+    environment:
+      VPN_NAME: "vpn1"
+      VPN_HOST: ""
+      VPN_PORT: ""
+      VPN_HUB: "VPNGATE"
+      VPN_USER: "vpn"
+      VPN_PASSWORD: "vpn"
+      VPN_NIC_MAC: "db:e0:14:72:8f:69"
+    volumes:
+      - /dev:/dev
+      - /lib/modules:/lib/modules
+    privileged: true
+    cap_add:
+      - ALL
+    stdin_open: true
+    tty: true
+    restart: always
+
+  grass1:
+    image: aron666/aron.grassminer
+    container_name: grass1
+    environment:
+      - GRASS_USER=${GRASS_USER}
+      - GRASS_PASS=${GRASS_PASS}
+      - ADMIN_USER=admin
+      - ADMIN_PASS=admin
+      # - PROXY_ENABLE=true / false
+      # - PROXY_HOST=http(s)://host:port
+      # - PROXY_USER=user
+      # - PROXY_PASS=pass
+    network_mode: "service:vpnclient1"
+    restart: always
