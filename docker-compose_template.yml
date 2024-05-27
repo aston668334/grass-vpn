@@ -21,6 +21,8 @@ services:
     stdin_open: true
     tty: true
     restart: always
+    networks:
+      - my_custom_network
 
   grass1:
     image: aron666/aron.grassminer
@@ -36,3 +38,9 @@ services:
       # - PROXY_PASS=pass
     network_mode: "service:vpnclient1"
     restart: always
+    networks:
+      - my_custom_network
+
+networks:
+  my_custom_network:
+    external: true
