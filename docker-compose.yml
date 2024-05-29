@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  vpnclienct1:
+    image: aron666/softether-vpnclient
+    container_name: vpnclienct1
+    environment:
+      VPN_NAME: "vpn1"
+      VPN_HOST: ""
+      VPN_PORT: "1194"
+      VPN_HUB: ""
+      VPN_USER: ""
+      VPN_PASSWORD: ""
+      #VPN_NIC_MAC: "3c:3c:43:0a:97:30"
+    volumes:
+      - /dev:/dev
+      - /lib/modules:/lib/modules
+    privileged: true
+    cap_add:
+      - ALL
+    stdin_open: true
+    tty: true
+    restart: always
+    networks:
+      - vpn
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+
+networks:
+  vpn:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.2.0.0/16
