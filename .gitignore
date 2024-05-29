@@ -1,3 +1,7 @@
 .venv/*
 .env
 vpn_grass/*
+docker-compose_*.yml
+Untitled-2.ipynb
+vpn_list.csv
+docker-compose.zip
