@@ -118,6 +118,7 @@ def generate_service(ip, port, protocol, grass_user, grass_pass):
             "/dev:/dev",
             "/lib/modules:/lib/modules"
         ],
+        "networks" : ["vpn"],
         "privileged": True,
         "cap_add": ["ALL"],
         "stdin_open": True,
@@ -138,16 +139,35 @@ def add_services_to_compose(ip_and_port_list, grass_user, grass_pass):
                 f"GRASS_USER={grass_user}",
                 f"GRASS_PASS={grass_pass}",
                 "ADMIN_USER=admin",
-                "ADMIN_PASS=admin"
+                "ADMIN_PASS=admin",
+                "PROXY_ENABLE=true",
+                "PROXY_HOST=http://" +  f"vpnclient_{ip.replace('.', '_')}_{port}" + ':3128'
+                # "PROXY_USER=user"
+                # "PROXY_PASS=pass"
             ],
-            "network_mode": f"service:vpnclient_{ip.replace('.', '_')}_{port}",
+            # "network_mode": f"service:vpnclient_{ip.replace('.', '_')}_{port}",
+            "networks" : ["vpn"],
             "restart": "always"
         }
         
         # Add VPN client service
         services[f"vpnclient_{ip.replace('.', '_')}_{port}"] = generate_service(ip, port, protocol, grass_user, grass_pass)
         
-    return {"version": "3", "services": services}
+    return {
+        "version": "3",
+        "services": services,
+        "networks": {
+            "vpn": {
+                "driver": "bridge",
+                "ipam": {
+                    "config": [
+                        {"subnet": "172.2.0.0/16"}
+                    ]
+                }
+            }
+        }
+    }
+    
 split = 10
 for i in range(0, len(ip_and_port), split):
     file_name = f"docker-compose_{i//split}.yml"
