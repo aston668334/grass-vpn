@@ -56,3 +56,19 @@ def start_testing_ips(source_dir):
                     print(f"Error: {e}")
         if count >= 10:
             break
+
+def get_ips():
+        # Step 1: Get all container IDs with names starting with "vpnclient_"
+    container_ids = subprocess.check_output(
+        "docker ps -aqf 'name=vpnclient_*'", shell=True).decode().strip().split('\n')
+
+    # Step 2: Use docker inspect to get IP addresses of these containers
+    ip_list = []
+    for container_id in container_ids:
+        if container_id:  # Check if container_id is not an empty string
+            ip_address = subprocess.check_output(
+                f"docker inspect -f '{{{{range .NetworkSettings.Networks}}}}{{{{.IPAddress}}}}{{{{end}}}}' {container_id}",
+                shell=True).decode().strip()
+            ip_list.append(ip_address)
+
+    return ip_list

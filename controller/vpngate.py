@@ -96,15 +96,16 @@ def write_csv(ip_and_port):
 
 def add_vpngate(df):
     ip_port_list = get_ip_port_list()
-    Open_Port = int(max(df.Open_Port) + 1)
+    # Open_Port = int(df.Open_Port.max(skipna=True) + 1)
     for container in ip_port_list:
         IP, Port, Protocol = container
         if IP in df['IP'].values:
             df.loc[df['IP'] == IP, 'Port'] = Port
             df.loc[df['IP'] == IP, 'Protocol'] = Protocol
         else:
-            new_data = pd.DataFrame({'IP': [IP], 'Port': [Port], 'Protocol': [Protocol],'Open_Port':[Open_Port]})
-            Open_Port += 1
+            # new_data = pd.DataFrame({'IP': [IP], 'Port': [Port], 'Protocol': [Protocol],'Open_Port':[Open_Port]})
+            new_data = pd.DataFrame({'IP': [IP], 'Port': [Port], 'Protocol': [Protocol]})
+            # Open_Port += 1
             df = pd.concat([df, new_data], ignore_index=True)
     return df
 

@@ -74,7 +74,7 @@ def create_directory_if_not_exists(directory):
 
 # Replace 'your_directory_here' with the directory path you want to create
 
-def create_docker_compose_file(directory_path,ip,port,protocol,open_port):
+def create_docker_compose_file(directory_path,ip,port,protocol,open_port = 0):
 
     grass_user = os.getenv("GRASS_USER")
     grass_pass = os.getenv("GRASS_PASS")
@@ -94,27 +94,27 @@ def write_docker_compose(file_path, compose_data):
 
 
 
-def add_services_to_compose(ip, port, protocol, grass_user, grass_pass, open_port):
+def add_services_to_compose(ip, port, protocol, grass_user, grass_pass, open_port = 0):
     services = {}
-    service_name = f"grass_{ip.replace('.', '_')}_{port}"
-    services[service_name] = {
-        "image": "aron666/aron.grassminer",
-        "container_name": f"grass_{ip.replace('.', '_')}_{port}",
-        "environment": [
-            f"GRASS_USER={grass_user}",
-            f"GRASS_PASS={grass_pass}",
-            "ADMIN_USER=admin",
-            "ADMIN_PASS=admin",
-            "PROXY_ENABLE=true",
-            "PROXY_HOST=http://" +  f"vpnclient_{ip.replace('.', '_')}_{port}" + ':3128'
-            # "PROXY_USER=user"
-            # "PROXY_PASS=pass"
-        ],
-        # "network_mode": f"service:vpnclient_{ip.replace('.', '_')}_{port}",
-        "network_mode" : "vpn",
-        "ports" : [str(open_port)+":8080"],
-        "restart": "always"
-    }
+    # service_name = f"grass_{ip.replace('.', '_')}_{port}"
+    # services[service_name] = {
+    #     "image": "aron666/aron.grassminer",
+    #     "container_name": f"grass_{ip.replace('.', '_')}_{port}",
+    #     "environment": [
+    #         f"GRASS_USER={grass_user}",
+    #         f"GRASS_PASS={grass_pass}",
+    #         "ADMIN_USER=admin",
+    #         "ADMIN_PASS=admin",
+    #         "PROXY_ENABLE=true",
+    #         "PROXY_HOST=http://" +  f"vpnclient_{ip.replace('.', '_')}_{port}" + ':3128'
+    #         # "PROXY_USER=user"
+    #         # "PROXY_PASS=pass"
+    #     ],
+    #     # "network_mode": f"service:vpnclient_{ip.replace('.', '_')}_{port}",
+    #     "network_mode" : "vpn",
+    #     "ports" : [str(open_port)+":8080"],
+    #     "restart": "always"
+    # }
     
     # Add VPN client service
     services[f"vpnclient_{ip.replace('.', '_')}_{port}"] = generate_service(ip, port, protocol, grass_user, grass_pass)

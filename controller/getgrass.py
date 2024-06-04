@@ -35,7 +35,7 @@ def start(API_KEY,csv_file,csv_file_vpn_list):
             'TotalUptime': [],
             'Restart_times': [],
             'Score': [],
-            'Open_Port': []
+            # 'Open_Port': []
         }
         df = pd.DataFrame(data)
 

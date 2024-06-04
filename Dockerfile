@@ -31,6 +31,6 @@ COPY conf/squid.conf /etc/squid/squid.conf
 # CMD ["/bin/sh", "run.sh"]
 
 RUN chmod +x ./Aron.VPN.Controller
-CMD ["sh", "-c", "squid && ./Aron.VPN.Controller"]
+CMD ["sh", "-c", "squid -N -f /etc/squid/squid.conf & ./Aron.VPN.Controller"]
 # ENTRYPOINT ["./Aron.VPN.Controller"]
 
