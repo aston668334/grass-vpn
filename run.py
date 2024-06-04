@@ -9,33 +9,83 @@ import subprocess
 import docker
 from dotenv import load_dotenv
 import re
+import signal
+from controller import getgrass_proxy
+import asyncio
+import time
 
 load_dotenv()
 
 from controller import dockercompose, dockercontroler, getgrass, vpngate
 
-# Define the CSV file name
-vpn_ip_status = 'vpn_ip_status.csv'
-csv_file = 'vpn_list.csv'
-temp_path = './grass_vpn_testing_ip/'
 
-df = getgrass.start(os.getenv("API_KEY"),vpn_ip_status,csv_file)
-valid_df = getgrass.update_docker_status(vpn_ip_status,df)
-valid_df_add = vpngate.add_vpngate(valid_df)
-bad_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] == 0)]
-good_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] > 0)]
-testing_ips = valid_df_add[~(valid_df_add['IP'].isin(bad_ips['IP']))& ~(valid_df_add['IP'].isin(good_ips['IP']))]
+def start():
+    # Define the CSV file name
+    vpn_ip_status = 'vpn_ip_status.csv'
+    csv_file = 'vpn_list.csv'
+    temp_path = './grass_vpn_testing_ip/'
+    max_container = int(os.getenv("MAX_CONTAINER"))
 
-# 遍歷 DataFrame 並檢查欄位是否為 NaN
-for ind, i in good_ips.iterrows():
-    if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
-        dockercompose.create_docker_compose_file("temp_path", i["IP"], int(i["Port"]), i["Protocol"])
+    df = getgrass.start(os.getenv("API_KEY"), vpn_ip_status, csv_file)
+    valid_df = getgrass.update_docker_status(vpn_ip_status, df)
+    valid_df_add = vpngate.add_vpngate(valid_df)
+
+    bad_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] == 0)]
+    good_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] > 0)]
+    testing_ips = valid_df_add[~(valid_df_add['IP'].isin(bad_ips['IP'])) & ~(valid_df_add['IP'].isin(good_ips['IP']))]
+
+    for ind, i in good_ips.iterrows():
+        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
+            dockercompose.create_docker_compose_file(temp_path, i["IP"], int(i["Port"]), i["Protocol"])
+
+    candidate_ip = testing_ips[testing_ips['TotalUptime'].isna()]
+    for ind, i in candidate_ip[:max_container].iterrows():
+        dockercompose.create_docker_compose_file(temp_path, i["IP"], int(i["Port"]), i["Protocol"])
+
+    dockercontroler.start_good_ips('./grass_vpn_good_ip/')
+    dockercontroler.start_good_ips(temp_path)
 
 
-candidate_ip = testing_ips[testing_ips['TotalUptime'].isna()]
-for ind, i in candidate_ip.iterrows():
-    dockercompose.create_docker_compose_file(temp_path,i["IP"],int(i["Port"]),i["Protocol"])
+def stop():
+    dockercontroler.stop_good_ips('./grass_vpn_testing_ip/')
 
-dockercontroler.start_good_ips('./grass_vpn_good_ip/')
 
-dockercontroler.start_good_ips('./grass_vpn_testing_ip/')
+def signal_handler(sig, frame):
+    print("Caught signal", sig)
+    stop()
+    sys.exit(0)
+
+
+async def main_loop():
+    while True:
+        try:
+            print("Starting services...")
+            start()
+            print("Services started. Waiting for 12 hours...")
+            await asyncio.sleep(12 * 60 * 60)  # Sleep for 12 hours
+            print("Stopping services...")
+            stop()
+            print("Services stopped. Restarting loop...")
+        except Exception as e:
+            print("An error occurred:", e)
+            stop()
+            sys.exit(1)
+
+
+async def run_main():
+    await getgrass_proxy.main()
+    await main_loop()
+
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal_handler)
+
+    loop = asyncio.get_event_loop()
+
+    try:
+        loop.run_until_complete(run_main())
+    except asyncio.CancelledError:
+        pass
+    finally:
+        stop()
+        loop.close()
