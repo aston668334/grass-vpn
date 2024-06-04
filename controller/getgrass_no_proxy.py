@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time     :2023/12/26 18:08
-# @Author   :ym
-# @File     :no_proxy.py
-# @Software :PyCharm
 import asyncio
 import random
 import ssl
