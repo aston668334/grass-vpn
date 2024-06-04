@@ -1,7 +1,12 @@
 # grass-vpn
 
-## usage
+## Description
+Automated mining for Grass.
 
+## Theory
+Using web socks to mimic communication between grass extension ans grass server.
+
+## Usage
 ### first usage 
 ```
 docker network create --driver bridge --subnet 172.2.0.0/16 vpn
