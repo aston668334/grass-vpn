@@ -4,7 +4,6 @@ import pandas as pd
 import os
 import shutil
 import sys
-import pydc_control
 import subprocess
 import docker
 from dotenv import load_dotenv
@@ -18,12 +17,13 @@ load_dotenv()
 
 from controller import dockercompose, dockercontroler, getgrass, vpngate
 
-
 def start():
-    # Define the CSV file name
     vpn_ip_status = 'vpn_ip_status.csv'
     csv_file = 'vpn_list.csv'
-    temp_path = './grass_vpn_testing_ip/'
+    temp_path_testing = './grass_vpn_testing_ip/'
+    temp_path_good = './grass_vpn_good_ip/'
+    temp_path_bad = './grass_vpn_bad_ip/'
+    temp_path_unstable = './grass_vpn_unstable_ip/'
     max_container = int(os.getenv("MAX_CONTAINER"))
 
     df = getgrass.start(os.getenv("API_KEY"), vpn_ip_status, csv_file)
@@ -36,25 +36,31 @@ def start():
 
     for ind, i in good_ips.iterrows():
         if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
-            dockercompose.create_docker_compose_file(temp_path, i["IP"], int(i["Port"]), i["Protocol"])
+            dockercompose.create_docker_compose_file(temp_path_good, i["IP"], int(i["Port"]), i["Protocol"])
 
     candidate_ip = testing_ips[testing_ips['TotalUptime'].isna()]
     for ind, i in candidate_ip[:max_container].iterrows():
-        dockercompose.create_docker_compose_file(temp_path, i["IP"], int(i["Port"]), i["Protocol"])
+        dockercompose.create_docker_compose_file(temp_path_testing, i["IP"], int(i["Port"]), i["Protocol"])
 
-    dockercontroler.start_good_ips('./grass_vpn_good_ip/')
-    dockercontroler.start_good_ips(temp_path)
+    dockercontroler.start_good_ips(temp_path_good)
+    dockercontroler.start_good_ips(temp_path_testing)
 
+    # Move bad IPs to bad directory and remove
+    for ind, i in bad_ips.iterrows():
+        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
+            dockercompose.create_docker_compose_file(temp_path_bad, i["IP"], int(i["Port"]), i["Protocol"])
+            dockercontroler.stop_remove_ip(temp_path_bad, i["IP"])
+
+    # Check and move unstable IPs
+    dockercontroler.check_unstable_ips(temp_path_unstable)
 
 def stop():
     dockercontroler.stop_good_ips('./grass_vpn_testing_ip/')
-
 
 def signal_handler(sig, frame):
     print("Caught signal", sig)
     stop()
     sys.exit(0)
-
 
 async def main_loop():
     while True:
@@ -62,7 +68,7 @@ async def main_loop():
             print("Starting services...")
             start()
             print("Services started. Waiting for 12 hours...")
-            await asyncio.sleep(12 * 60 * 60)  # Sleep for 12 hours
+            await asyncio.sleep(3 * 60 * 60)  # Sleep for 3 hours
             print("Stopping services...")
             stop()
             print("Services stopped. Restarting loop...")
@@ -71,11 +77,9 @@ async def main_loop():
             stop()
             sys.exit(1)
 
-
 async def run_main():
     await getgrass_proxy.main()
     await main_loop()
-
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
