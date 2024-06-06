@@ -4,7 +4,8 @@
 Automated mining for Grass.
 
 ## Theory
-Using web socks to mimic communication between grass extension ans grass server.
+Use VPNgate vpn as proxy server, then use this IP pool to mining Grass.
+And use web socks to mimic communication between grass extension ans grass server.
 
 ## Usage
 ### first usage 
