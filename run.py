@@ -57,9 +57,21 @@ def start():
 def stop():
     dockercontroler.stop_good_ips('./grass_vpn_testing_ip/')
 
+def stop_and_remove_all_docker_containers():
+    try:
+        # Stop all running containers
+        subprocess.run(['docker', 'stop', '$(docker', 'ps', '-aq)'], shell=True, check=True)
+        # Remove all containers
+        subprocess.run(['docker', 'rm', '$(docker', 'ps', '-aq)'], shell=True, check=True)
+        # Remove all networks
+        subprocess.run(['docker', 'network', 'prune', '-f'], check=True)
+        print("All Docker containers and networks have been stopped and removed.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
+
 def signal_handler(sig, frame):
     print("Caught signal", sig)
-    stop()
+    stop_and_remove_all_docker_containers()
     sys.exit(0)
 
 async def main_loop():
