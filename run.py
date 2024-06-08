@@ -9,99 +9,112 @@ import docker
 from dotenv import load_dotenv
 import re
 import signal
-from controller import getgrass_proxy
 import asyncio
 import time
+import schedule
+from controller import getgrass_proxy, dockercompose, dockercontroler, getgrass, vpngate, nodepay_proxy
 
 load_dotenv()
 
-from controller import dockercompose, dockercontroler, getgrass, vpngate
+def manage_docker_network():
+    network_name = "vpn"
+    subnet = "172.2.0.0/16"
 
-def start():
+    # Check if the network exists
+    existing_networks = subprocess.check_output(['docker', 'network', 'ls', '--filter', f'name={network_name}', '--format', '{{.Name}}']).decode().strip().split('\n')
+
+    if network_name in existing_networks:
+        print(f"Network {network_name} exists. Removing it...")
+        subprocess.run(['docker', 'network', 'rm', network_name], check=True)
+
+    print(f"Creating network {network_name} with subnet {subnet}...")
+    subprocess.run(['docker', 'network', 'create', '--driver', 'bridge', '--subnet', subnet, network_name], check=True)
+
+def remove_docker_network():
+    network_name = "vpn"
+    print(f"Removing network {network_name}...")
+    subprocess.run(['docker', 'network', 'rm', network_name], check=True)
+
+def count_running_vpnclient_containers():
+    output = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'name=vpnclient*']).decode().strip()
+    if output:
+        return len(output.split('\n'))
+    return 0
+
+def start_vpn_services(df):
+    for ind, i in df.iterrows():
+        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
+            dockercompose.start_vpn_container(i["IP"], int(i["Port"]), i["Protocol"])
+
+def stop_vpn_services(df):
+    for ind, i in df.iterrows():
+        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
+            dockercompose.stop_vpn_container(i["IP"], int(i["Port"]), i["Protocol"])
+
+def manage_vpn_services():
     vpn_ip_status = 'vpn_ip_status.csv'
-    csv_file = 'vpn_list.csv'
-    temp_path_testing = './grass_vpn_testing_ip/'
-    temp_path_good = './grass_vpn_good_ip/'
-    temp_path_bad = './grass_vpn_bad_ip/'
-    temp_path_unstable = './grass_vpn_unstable_ip/'
     max_container = int(os.getenv("MAX_CONTAINER"))
 
-    df = getgrass.start(os.getenv("API_KEY"), vpn_ip_status, csv_file)
+    df = getgrass.start(os.getenv("API_KEY"), vpn_ip_status)
     valid_df = getgrass.update_docker_status(vpn_ip_status, df)
     valid_df_add = vpngate.add_vpngate(valid_df)
+
+    valid_df_add.to_csv("vpn_ip_status.csv", index=False)
 
     bad_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] == 0)]
     good_ips = valid_df_add[(valid_df_add['TotalUptime'] > 60) & (valid_df_add['Score'] > 0)]
     testing_ips = valid_df_add[~(valid_df_add['IP'].isin(bad_ips['IP'])) & ~(valid_df_add['IP'].isin(good_ips['IP']))]
 
-    for ind, i in good_ips.iterrows():
-        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
-            dockercompose.create_docker_compose_file(temp_path_good, i["IP"], int(i["Port"]), i["Protocol"])
+    # Start VPN services for good IPs
+    start_vpn_services(good_ips)
 
     candidate_ip = testing_ips[testing_ips['TotalUptime'].isna()]
-    for ind, i in candidate_ip[:max_container].iterrows():
-        dockercompose.create_docker_compose_file(temp_path_testing, i["IP"], int(i["Port"]), i["Protocol"])
 
-    dockercontroler.start_good_ips(temp_path_good)
-    dockercontroler.start_good_ips(temp_path_testing)
+    current_vpnclient_count = count_running_vpnclient_containers()
+    for ind, i in candidate_ip.iterrows():
+        if current_vpnclient_count < max_container:
+            dockercompose.start_vpn_container(i["IP"], int(i["Port"]), i["Protocol"])
+            current_vpnclient_count += 1
+        else:
+            break
 
-    # Move bad IPs to bad directory and remove
-    for ind, i in bad_ips.iterrows():
-        if pd.notna(i["IP"]) and pd.notna(i["Port"]) and pd.notna(i["Protocol"]):
-            dockercompose.create_docker_compose_file(temp_path_bad, i["IP"], int(i["Port"]), i["Protocol"])
-            dockercontroler.stop_remove_ip(temp_path_bad, i["IP"])
+    # Stop VPN services for bad IPs
+    stop_vpn_services(bad_ips)
 
     # Check and move unstable IPs
-    dockercontroler.check_unstable_ips(temp_path_unstable)
+    dockercompose.check_all_containers()
+
+def start():
+    manage_vpn_services()
+    asyncio.run(getgrass_proxy.main())  # Start WebSocket connections and proxy management
+    asyncio.run(nodepay_proxy.main())  # Start WebSocket connections and proxy management
+
 
 def stop():
-    dockercontroler.stop_good_ips('./grass_vpn_testing_ip/')
+    client = docker.from_env()
+    containers = client.containers.list(all=True)
+    for container in containers:
+        if container.name.startswith('vpnclient_'):
+            print(f'Stopping and removing container {container.name}...')
+            container.stop()
+            container.remove()
+    remove_docker_network()
 
-def stop_and_remove_all_docker_containers():
-    try:
-        # Stop all running containers
-        subprocess.run(['docker', 'stop', '$(docker', 'ps', '-aq)'], shell=True, check=True)
-        # Remove all containers
-        subprocess.run(['docker', 'rm', '$(docker', 'ps', '-aq)'], shell=True, check=True)
-        # Remove all networks
-        subprocess.run(['docker', 'network', 'prune', '-f'], check=True)
-        print("All Docker containers and networks have been stopped and removed.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
+def auto_restart_docker():
+    print("Restarting VPN services...")
+    stop()
+    time.sleep(10)  # Give some time for the services to stop completely
+    start()
 
-def signal_handler(sig, frame):
-    print("Caught signal", sig)
-    stop_and_remove_all_docker_containers()
-    sys.exit(0)
+def auto_restart_proxy():
+    print("Restarting grass and nodepay services...")
+    asyncio.run(getgrass_proxy.main())  # Start WebSocket connections and proxy management
+    asyncio.run(nodepay_proxy.main())  # Start WebSocket connections and proxy management
 
-async def main_loop():
+
+if __name__ == "__main__":
+    start()
+    schedule.every(12).hours.do(auto_restart_proxy)
+    schedule.every(10).minutes.do(auto_restart_docker)  # Schedule auto_restart every 10 minutes
     while True:
-        try:
-            print("Starting services...")
-            start()
-            print("Services started. Waiting for 12 hours...")
-            await asyncio.sleep(3 * 60 * 60)  # Sleep for 3 hours
-            print("Stopping services...")
-            stop()
-            print("Services stopped. Restarting loop...")
-        except Exception as e:
-            print("An error occurred:", e)
-            stop()
-            sys.exit(1)
-
-async def run_main():
-    await getgrass_proxy.main()
-    await main_loop()
-
-if __name__ == '__main__':
-    signal.signal(signal.SIGINT, signal_handler)
-
-    loop = asyncio.get_event_loop()
-
-    try:
-        loop.run_until_complete(run_main())
-    except asyncio.CancelledError:
-        pass
-    finally:
-        stop()
-        loop.close()
+        schedule.run_pending()

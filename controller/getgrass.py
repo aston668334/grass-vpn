@@ -9,7 +9,7 @@ import subprocess
 import docker
 
 
-def start(API_KEY,csv_file,csv_file_vpn_list):
+def start(API_KEY,csv_file):
 
     url = "https://api.getgrass.io/activeIps"
         # Define the CSV file name
