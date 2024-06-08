@@ -29,6 +29,7 @@ localStorage.getItem('userId');
 ### gerneral usage 
 
 ```
+docker stop $(docker ps -aq --filter "name=vpnclient_*") && docker rm $(docker ps -aq --filter "name=vpnclient_*")
 source ./.venv/bin/activate
 python3 ./run.py 
 ```
